@@ -29,9 +29,18 @@ def push_to_airtable(records):
             for r in records
         ]
     }
+
     resp = requests.post(url, json=payload, headers=headers)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp.raise_for_status()
+        return resp.json()
+    except requests.HTTPError:
+        # Instead of crashing, return Airtable’s error details
+        return {
+            "error":  resp.status_code,
+            "detail": resp.json()
+        }
+
 
 # 3. Main route: scrape, filter, and sync
 @app.route("/", methods=["GET"])

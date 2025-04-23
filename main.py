@@ -86,31 +86,85 @@ def push_to_airtable(records):
 # 3. Main route: scrape, filter, and sync
 @app.route("/", methods=["GET"])
 def scrape_and_sync():
-    # --- Scrape from Neynar ---
-    channel = request.args.get("channel", "nouns-draws")
-    # ← NEW: pagination cursor (omit on first run)
-    # automatically fetch the last cursor from Airtable State
-    cursor, state_rec_id = get_last_cursor(channel)
-    url     = "https://api.neynar.com/v2/farcaster/feed/channels"
-    headers = {
-        "accept": "application/json",
-        "api_key": NEY_API_KEY
-    }
-    params = {
-        "channel_ids":  channel,
-        "with_recasts": False,
-        "with_replies": False,
-        "limit":        20,
-        **({"cursor": cursor} if cursor else {})
-    }
-    resp = requests.get(url, headers=headers, params=params)
-    data = resp.json()
-    raw_casts = data.get("casts", [])
-    # ← NEW: give back the cursor for the next page
-    next_cursor = data.get("next", {}).get("cursor")
-    # save the new cursor, so next run picks up where we left off
-    if state_rec_id:
-        set_last_cursor(state_rec_id, next_cursor)
+    # 1. Fetch all channels and their cursors from the State table
+    url_state = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/State"
+    headers_state = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
+    resp_state = requests.get(url_state, headers=headers_state)
+    resp_state.raise_for_status()
+    states = resp_state.json().get("records", [])
+
+    summary = []
+
+    for rec in states:
+        channel       = rec["fields"]["Channel"]
+        cursor        = rec["fields"].get("LastCursor")
+        state_rec_id  = rec["id"]
+
+        # 2. Fetch the next page of casts for this channel
+        neynar_url = "https://api.neynar.com/v2/farcaster/feed/channels"
+        headers_neynar = {
+            "accept":   "application/json",
+            "api_key":  NEY_API_KEY
+        }
+        params = {
+            "channel_ids":  channel,
+            "with_recasts": False,
+            "with_replies": False,
+            "limit":        20,
+            **({"cursor": cursor} if cursor else {})
+        }
+        r = requests.get(neynar_url, headers=headers_neynar, params=params)
+        r.raise_for_status()
+        data = r.json()
+        raw_casts  = data.get("casts", [])
+        next_cursor= data.get("next", {}).get("cursor")
+
+        # 3. Filter for image embeds and collect fields
+        filtered = []
+        for item in raw_casts:
+            embeds = item.get("embeds", [])
+            image_urls = [
+                e["url"]
+                for e in embeds
+                if e.get("url") and "image" in e.get("metadata", {}).get("content_type", "")
+            ]
+            if not image_urls:
+                continue
+
+            author = item.get("author", {}).get("username", "")
+            farcaster_likes = item.get("reactions", {}).get("likes_count", 0)
+            filtered.append({
+                "username":            author,
+                "text":                item.get("text", ""),
+                "media":               image_urls,
+                "link":                f"https://warpcast.com/{author}/{item.get('hash')}",
+                "Farcaster Likes":     farcaster_likes,
+                "Farcaster Timestamp": item.get("timestamp"),
+                "Channel":             channel
+            })
+
+        # 4. Push these records to the Casts table in Airtable
+        push_resp = push_to_airtable(filtered)
+
+        # 5. Update the State table with the new cursor
+        patch_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/State/{state_rec_id}"
+        patch_headers = {
+            "Authorization": f"Bearer {AIRTABLE_TOKEN}",
+            "Content-Type":  "application/json"
+        }
+        patch_body = {"fields": {"LastCursor": next_cursor}}
+        patch_resp = requests.patch(patch_url, json=patch_body, headers=patch_headers)
+        patch_resp.raise_for_status()
+
+        summary.append({
+            "channel":      channel,
+            "fetched":      len(filtered),
+            "next_cursor":  next_cursor,
+            "push_result":  push_resp
+        })
+
+    return jsonify(summary)
+
 
 
     # --- Filter for image embeds ---

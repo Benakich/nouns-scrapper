@@ -49,12 +49,4 @@ Done using low-code and automation
 
 ---
 
-##  Installation
 
-```bash
-# 1. Clone repo
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
-
-# 2. Install dependencies
-pip install -r requirements.txt

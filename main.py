@@ -63,9 +63,9 @@ def push_to_airtable(records):
                     "Text":                r["text"],
                     "Media":               [{"url": m} for m in r["media"]],
                     "Link":                r["link"],
-                    "Farcaster Likes":     r["farcaster_likes"],
+                    "Farcaster Likes":     r["Farcaster Likes"],
                     "Cast Hash":           r["hash"], 
-                    "Farcaster Timestamp": r["timestamp"],
+                    "Farcaster Timestamp": r["Farcaster Timestamp"],
                     "Channel":             r["Channel"]
                 }}
                 for r in batch

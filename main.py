@@ -65,7 +65,8 @@ def push_to_airtable(records):
                     "Link":                r["link"],
                     "Farcaster Likes":     r["farcaster_likes"],
                     "Cast Hash":           r["hash"], 
-                    "Farcaster Timestamp": r["timestamp"]
+                    "Farcaster Timestamp": r["timestamp"],
+                    "Channel":             r["Channel"]
                 }}
                 for r in batch
             ]
@@ -150,7 +151,7 @@ def scrape_and_sync():
         headers_at   = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
         params       = {
             "filterByFormula": f"{{Channel}}='{channel}'",
-            "fields":          ["Cast Hash"],
+            "fields[]":          ["Cast Hash"],
             "pageSize":        100
         }
         resp_existing = requests.get(airtable_url, headers=headers_at, params=params)
@@ -163,14 +164,11 @@ def scrape_and_sync():
                 "airtable_detail": resp_existing.json()
         }), resp_existing.status_code
 
-        recs = resp_existing.json().get("records", [])
-        existing_hashes = {rec["fields"].get("Cast Hash") for rec in recs if rec["fields"].get("Cast Hash")}
-        
-        resp_existing.raise_for_status()
+        # now build a set of hashes to skip duplicates
         existing_hashes = {
-        rec["fields"].get("Cast Hash")
-        for rec in resp_existing.json().get("records", [])
-        if rec["fields"].get("Cast Hash") is not None
+            rec["fields"]["Cast Hash"]
+            for rec in resp_existing.json().get("records", [])
+            if rec["fields"].get("Cast Hash")
         }
 
         # Keep only those not already in Airtable

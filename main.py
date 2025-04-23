@@ -105,7 +105,6 @@ def scrape_and_sync():
             continue
         cursor       = fields.get("LastCursor")
         state_rec_id = rec["id"]
-    …
 
 
         # 2. Fetch the next page of casts for this channel

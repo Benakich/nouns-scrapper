@@ -154,6 +154,18 @@ def scrape_and_sync():
             "pageSize":        100
         }
         resp_existing = requests.get(airtable_url, headers=headers_at, params=params)
+
+        if not resp_existing.ok:
+        # Return Airtable’s error details right in the response
+            return jsonify({
+                "error":           "Failed to fetch existing hashes",
+                "status_code":     resp_existing.status_code,
+                "airtable_detail": resp_existing.json()
+        }), resp_existing.status_code
+
+        recs = resp_existing.json().get("records", [])
+        existing_hashes = {rec["fields"].get("Cast Hash") for rec in recs if rec["fields"].get("Cast Hash")}
+        
         resp_existing.raise_for_status()
         existing_hashes = {
         rec["fields"].get("Cast Hash")

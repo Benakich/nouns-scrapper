@@ -140,11 +140,38 @@ def scrape_and_sync():
                 "link":                f"https://warpcast.com/{author}/{item.get('hash')}",
                 "Farcaster Likes":     farcaster_likes,
                 "Farcaster Timestamp": item.get("timestamp"),
+                "hash":                item.get("hash"),
                 "Channel":             channel
             })
 
+        # Deduplicate by pulling existing Cast Hashes for this channel
+        airtable_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE}"
+        headers_at   = {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
+        params       = {
+            "filterByFormula": f"{{Channel}}='{channel}'",
+            "fields":          ["Cast Hash"],
+            "pageSize":        100
+        }
+        resp_existing = requests.get(airtable_url, headers=headers_at, params=params)
+        resp_existing.raise_for_status()
+        existing_hashes = {
+        rec["fields"].get("Cast Hash")
+        for rec in resp_existing.json().get("records", [])
+        if rec["fields"].get("Cast Hash") is not None
+        }
+
+        # Keep only those not already in Airtable
+        unique_records = [
+        r for r in filtered
+        if r["hash"] not in existing_hashes
+        ]
+
+        # Push only the new ones
+        push_resp = push_to_airtable(unique_records)
+
+        
         # 4. Push these records to the Casts table in Airtable
-        push_resp = push_to_airtable(filtered)
+        #push_resp = push_to_airtable(filtered)
 
         # 5. Update the State table with the new cursor
         patch_url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/State/{state_rec_id}"

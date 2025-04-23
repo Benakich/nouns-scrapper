@@ -43,35 +43,44 @@ def set_last_cursor(record_id, cursor):
 
 # 2. Helper to push records to Airtable
 def push_to_airtable(records):
+    """
+    Airtable only accepts up to 10 records per request.
+    Split into chunks of 10 and POST each in turn.
+    """
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE}"
     headers = {
         "Authorization": f"Bearer {AIRTABLE_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type":  "application/json"
     }
-    payload = {
-        "records": [
-            {"fields": {
-                "Username":  r["username"],
-                "Text":      r["text"],
-                "Media":     [{"url": m} for m in r["media"]],
-                "Link":      r["link"],
-                "Farcaster Likes": r["farcaster_likes"],
-                "Farcaster Timestamp": r["timestamp"]
-            }}
-            for r in records
-        ]
-    }
+    all_responses = []
 
-    resp = requests.post(url, json=payload, headers=headers)
-    try:
-        resp.raise_for_status()
-        return resp.json()
-    except requests.HTTPError:
-        # Instead of crashing, return Airtable’s error details
-        return {
-            "error":  resp.status_code,
-            "detail": resp.json()
+    for i in range(0, len(records), 10):
+        batch = records[i : i + 10]
+        payload = {
+            "records": [
+                {"fields": {
+                    "Username":            r["username"],
+                    "Text":                r["text"],
+                    "Media":               [{"url": m} for m in r["media"]],
+                    "Link":                r["link"],
+                    "Farcaster Likes":     r["farcaster_likes"],
+                    "Farcaster Timestamp": r["timestamp"]
+                }}
+                for r in batch
+            ]
         }
+
+        resp = requests.post(url, json=payload, headers=headers)
+        try:
+            resp.raise_for_status()
+            all_responses.append(resp.json())
+        except requests.HTTPError:
+            return {
+                "error":  resp.status_code,
+                "detail": resp.json()
+            }
+
+    return {"batches": all_responses}
 
 
 # 3. Main route: scrape, filter, and sync

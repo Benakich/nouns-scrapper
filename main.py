@@ -23,7 +23,6 @@ def push_to_airtable(records):
                 "Username":  r["username"],
                 "Text":      r["text"],
                 "Media":     [{"url": m} for m in r["media"]],
-                "Timestamp": r["timestamp"],
                 "Link":      r["link"]
             }}
             for r in records

@@ -11,27 +11,34 @@ AIRTABLE_BASE_ID   = os.environ["AIRTABLE_BASE_ID"]
 AIRTABLE_TABLE     = os.environ["AIRTABLE_TABLE_NAME"]
 
 # Helper: read the last cursor from your State table
-def get_last_cursor():
+def get_last_cursor(channel):
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/State"
-    headers = {"Authorization": f"Bearer {AIR_TOKEN}"}
-    # filter for your channel
-    params = {"filterByFormula": f"{{Channel}}='{CHANNEL}'"}
+    headers = {
+        "Authorization": f"Bearer {AIRTABLE_TOKEN}"
+    }
+    # filter for the record whose Channel field matches our channel
+    params = {
+        "filterByFormula": f"{{Channel}}='{channel}'"
+    }
     r = requests.get(url, headers=headers, params=params)
+    r.raise_for_status()
     recs = r.json().get("records", [])
     if not recs:
         return None, None
     rec = recs[0]
     return rec["fields"].get("LastCursor"), rec["id"]
 
+
 # Helper: write the new cursor back into the State record
 def set_last_cursor(record_id, cursor):
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/State/{record_id}"
     headers = {
-        "Authorization": f"Bearer {AIR_TOKEN}",
+        "Authorization": f"Bearer {AIRTABLE_TOKEN}",
         "Content-Type":  "application/json"
     }
     payload = {"fields": {"LastCursor": cursor}}
-    requests.patch(url, json=payload, headers=headers)
+    resp = requests.patch(url, json=payload, headers=headers)
+    resp.raise_for_status()
 
 
 # 2. Helper to push records to Airtable
@@ -74,7 +81,7 @@ def scrape_and_sync():
     channel = request.args.get("channel", "nouns-draws")
     # ← NEW: pagination cursor (omit on first run)
     # automatically fetch the last cursor from Airtable State
-    cursor, state_rec_id = get_last_cursor()
+    cursor, state_rec_id = get_last_cursor(channel)
     url     = "https://api.neynar.com/v2/farcaster/feed/channels"
     headers = {
         "accept": "application/json",

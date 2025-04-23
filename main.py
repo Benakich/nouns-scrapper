@@ -23,7 +23,8 @@ def push_to_airtable(records):
                 "Username":  r["username"],
                 "Text":      r["text"],
                 "Media":     [{"url": m} for m in r["media"]],
-                "Link":      r["link"]
+                "Link":      r["link"],
+                "Farcaster Likes": r["farcaster_likes"]
             }}
             for r in records
         ]
@@ -46,6 +47,8 @@ def push_to_airtable(records):
 def scrape_and_sync():
     # --- Scrape from Neynar ---
     channel = request.args.get("channel", "nouns-draws")
+    # ← NEW: pagination cursor (omit on first run)
+    cursor     = request.args.get("cursor", None)
     url     = "https://api.neynar.com/v2/farcaster/feed/channels"
     headers = {
         "accept": "application/json",
@@ -55,11 +58,14 @@ def scrape_and_sync():
         "channel_ids":  channel,
         "with_recasts": False,
         "with_replies": False,
-        "limit":        20
+        "limit":        20,
+        **({"cursor": cursor} if cursor else {})
     }
     resp = requests.get(url, headers=headers, params=params)
     data = resp.json()
     raw_casts = data.get("casts", [])
+    # ← NEW: give back the cursor for the next page
+    next_cursor = data.get("next", {}).get("cursor")
 
     # --- Filter for image embeds ---
     filtered = []
@@ -75,12 +81,14 @@ def scrape_and_sync():
             continue
 
         author = item.get("author", {}).get("username", "")
+        farcaster_likes = item.get("reactions", {}).get("likes_count", 0)
         filtered.append({
             "username": author,
             "text":     item.get("text", ""),
             "media":    image_urls,
             "timestamp":item.get("timestamp"),
-            "link":     f"https://warpcast.com/{author}/{item.get('hash')}"
+            "link":     f"https://warpcast.com/{author}/{item.get('hash')}",
+            "farcaster_likes": farcaster_likes
         })
 
     # --- Sync to Airtable ---
@@ -89,7 +97,8 @@ def scrape_and_sync():
     # --- Return both for confirmation ---
     return jsonify({
         "airtable_sync": airtable_resp,
-        "casts":         filtered
+        "casts":         filtered,
+        "next_cursor": next_cursor
     })
 
 if __name__ == "__main__":

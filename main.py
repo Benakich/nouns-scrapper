@@ -98,9 +98,15 @@ def scrape_and_sync():
     summary = []
 
     for rec in states:
-        channel       = rec["fields"]["Channel"]
-        cursor        = rec["fields"].get("LastCursor")
-        state_rec_id  = rec["id"]
+        fields = rec.get("fields", {})
+        channel = fields.get("Channel")
+        if not channel:
+            # no channel in this row—skip it
+            continue
+        cursor       = fields.get("LastCursor")
+        state_rec_id = rec["id"]
+    …
+
 
         # 2. Fetch the next page of casts for this channel
         neynar_url = "https://api.neynar.com/v2/farcaster/feed/channels"
